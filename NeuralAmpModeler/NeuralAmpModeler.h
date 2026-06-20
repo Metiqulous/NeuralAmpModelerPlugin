@@ -41,6 +41,7 @@ enum EParams
   // The rest is fine though.
   kNoiseGateActive,
   kEQActive,
+  kLinkActive,
   kIRToggle,
   // Input calibration
   kCalibrateInput,
@@ -289,6 +290,11 @@ private:
   // Input and output gain
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
+
+  // Link state (input/output gain compensation)
+  bool mLinkGuard = false;
+  double mPrevInputLevel = 0.0;   // dB, matches kInputLevel default
+  double mPrevOutputLevel = 0.0;  // dB, matches kOutputLevel default
 
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
