@@ -88,6 +88,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kNoiseGateThreshold)->InitGain("Threshold", -80.0, -100.0, 0.0, 0.1);
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
+  GetParam(kLinkActive)->InitBool("Link", true);
   GetParam(kOutputMode)->InitEnum("OutputMode", 1, {"Raw", "Normalized", "Calibrated"}); // TODO DRY w/ control
   GetParam(kIRToggle)->InitBool("IRToggle", true);
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
@@ -161,6 +162,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto ngToggleArea =
       noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto linkToggleArea =
+      outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
     // Areas for model and IR
     const auto fileWidth = 200.0f;
@@ -267,6 +270,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
+    pGraphics->AttachControl(new NAMSwitchControl(linkToggleArea, kLinkActive, "Link", style, switchHandleBitmap));
 
     // The knobs
     pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
@@ -539,6 +543,38 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
         break;
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+      case kLinkActive:
+        mPrevInputLevel = GetParam(kInputLevel)->Value();
+        mPrevOutputLevel = GetParam(kOutputLevel)->Value();
+        break;
+      case kInputLevel:
+      {
+        if (GetParam(kLinkActive)->Bool() && !mLinkGuard)
+        {
+          mLinkGuard = true;
+          const double delta = GetParam(kInputLevel)->Value() - mPrevInputLevel;
+          const double newOutput = std::clamp(GetParam(kOutputLevel)->Value() - delta, -40.0, 40.0);
+          SetParameterValue(kOutputLevel, GetParam(kOutputLevel)->ToNormalized(newOutput));
+          SendParameterValueFromDelegate(kOutputLevel, GetParam(kOutputLevel)->GetNormalized(), true);
+          mLinkGuard = false;
+        }
+        mPrevInputLevel = GetParam(kInputLevel)->Value();
+        break;
+      }
+      case kOutputLevel:
+      {
+        if (GetParam(kLinkActive)->Bool() && !mLinkGuard)
+        {
+          mLinkGuard = true;
+          const double delta = GetParam(kOutputLevel)->Value() - mPrevOutputLevel;
+          const double newInput = std::clamp(GetParam(kInputLevel)->Value() - delta, -20.0, 20.0);
+          SetParameterValue(kInputLevel, GetParam(kInputLevel)->ToNormalized(newInput));
+          SendParameterValueFromDelegate(kInputLevel, GetParam(kInputLevel)->GetNormalized(), true);
+          mLinkGuard = false;
+        }
+        mPrevOutputLevel = GetParam(kOutputLevel)->Value();
+        break;
+      }
       default: break;
     }
   }
